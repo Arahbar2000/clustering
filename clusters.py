@@ -39,23 +39,23 @@ def parse_arguments():
     help_o = "Output directory that will show clusters for each image"
     required.add_argument("-clusteredImages", "--clustered_images_dir", help=help_o, type=str, required=True)
 
-    help_e = "epsilon value"
-    required.add_argument("-epsilon", "--epsilon", help=help_e, type=int, required=True)
-
-    help_c = "clustering method"
-    required.add_argument("-method", "--method", help=help_c, type=str, required=True)
-
     help_os = "statistics_dir"
     required.add_argument("-stats", "--statistics_dir", help=help_os, type=str, required=True)
 
     help_im = "images_dir"
     required.add_argument("-images", "--images_dir", help=help_im, type=str, required=True)
 
-    help_min = "minimum cluster size"
-    required.add_argument("-min_size", "--min_size", help=help_min, type=int, required=True)
+    help_e = "epsilon value"
+    required.add_argument("-epsilon", "--epsilon", help=help_e, type=int, required=False)
 
-    help_outline = "choices of 0-3; 0 to not show any outline, 1 to show ellipses, 2 to show convex hulls, and 3 to show both ellipses and convex hulls"
-    required.add_argument("-outline", "--outline", help=help_outline, type=int, required=True)
+    help_c = "clustering method"
+    required.add_argument("-method", "--method", help=help_c, type=str, required=False)
+
+    help_min = "minimum cluster size"
+    required.add_argument("-min_size", "--min_size", help=help_min, type=int, required=False)
+
+    help_outline = "choices of 0-2; 0 to show ellipses, 1 to show convex hulls, and 2 to show both ellipses and convex hulls"
+    required.add_argument("-outline", "--outline", help=help_outline, type=int, required=False)
 
 
 
@@ -63,11 +63,14 @@ def parse_arguments():
 
 
     args = parser.parse_args()
-    if args.method.lower() not in ['dbscan', 'optics', 'hdbscan']:
-    	sys.exit("ERROR: inputted clustering method not available")
 
-    if args.min_size <= 4:
-    	sys.exit("ERROR: min size must be greater than four")
+    print(args.outline)
+    if args.method != None:
+    	if args.method.lower() not in ['dbscan', 'optics', 'hdbscan']:
+    		sys.exit("ERROR: inputted clustering method not available")
+    if args.min_size != None:
+    	if args.min_size <= 4:
+    		sys.exit("ERROR: min size must be greater than four")
 
 
     assert os.path.isdir(args.input_dir), "Unable to find input directory: {}".format(args.input_dir)
@@ -96,8 +99,14 @@ def read_csv(csv_path):
 	coordinates = np.genfromtxt(csv_path, delimiter=',', skip_header=1, usecols=(1,2))
 	return coordinates
 
-def get_clusters(data, e = 35, min_size = 6, clusterMethod='dbscan'):
-	if clusterMethod == 'dbscan':
+def get_clusters(data, e = None, min_size = None, clusterMethod='dbscan'):
+	if e == None:
+		e = 35
+	if min_size == None:
+		min_size = 6
+	if clusterMethod != None:
+		clusterMethod = clusterMethod.lower()
+	if clusterMethod == 'dbscan' or clusterMethod == None:
 		clust = DBSCAN(eps=e, min_samples=min_size).fit(data)
 	elif clusterMethod == 'optics':
 		clust = OPTICS(min_samples = min_size).fit(data)
@@ -126,7 +135,7 @@ def get_clusters(data, e = 35, min_size = 6, clusterMethod='dbscan'):
 	plt.title('Estimated number of clusters: %d' % n_clusters)
 	return labels
 
-def clusterInfo(data, labels, out_path, h, w, axes, outline=0,):
+def clusterInfo(data, labels, out_path, h, w, axes, outline=None,):
 	data = np.array(data, dtype='float64')
 	unique_labels = set(labels[labels != -1])
 	info = pd.DataFrame(columns = ['label', 'centroid', 'area','n_nuclei', 'nuclei_density', '    eccentricity'], dtype='int64', copy=True)
@@ -179,14 +188,14 @@ def clusterInfo(data, labels, out_path, h, w, axes, outline=0,):
 				else:
 					e = 1
 					ellipse = Ellipse((xc,yc), 2*a, 2*b, degrees, fill=False)
-				if outline == 3:
+				if outline == 2:
 					for simplex in hull.simplices:
 						axes.plot(clusterIndices[simplex, 0], clusterIndices[simplex, 1], 'k-', color='green')
 					axes.add_patch(ellipse)
-				elif outline == 2:
+				elif outline == 1:
 					for simplex in hull.simplices:
 						axes.plot(clusterIndices[simplex, 0], clusterIndices[simplex, 1], 'k-')
-				elif outline == 1:
+				elif outline == 0:
 					axes.add_patch(ellipse)
 
 					
@@ -217,7 +226,7 @@ def extract_clusters(user_options):
 			axes.set_xlim((0, w), auto=False)
 			plt.imshow(img)
 
-			labels = get_clusters(coordinates, user_options["epsilon"], clusterMethod=user_options["method"].lower())
+			labels = get_clusters(coordinates, user_options["epsilon"], clusterMethod=user_options["method"])
 			clusterInfo(coordinates, labels, stats_path, h ,w, axes, outline=user_options["outline"])
 			plt.savefig(img_cluster_path)
 			plt.clf()
