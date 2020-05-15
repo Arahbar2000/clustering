@@ -11,14 +11,16 @@ here is the list of required options:
 -clusteredImages : path to directory to store generated images showing clusters
 -images : path to directory containing stored image files
 -stats : path to directory to store generated csv files of stats for clusters in each image
--method : clustering method to be used; the methods are "dbscan", "optics", and "hdbscan"
--epsilon : int value signifying the distance threshold for clusters
--min_size : minimum size to classify a cluster; size must be greater than four
--outline : choices of 0-3:
-			0: no outline shown
-			1: only ellipses are shown
-			2: only convex hulls are shown
-			3: both ellipses and convex hulls are shown
+
+here is the list of optional options:
+
+-method : clustering method to be used; the methods are "dbscan", "optics", and "hdbscan"; 				default is 'dbscan'
+-epsilon : int value signifying the distance threshold for clusters; default is 35
+-min_size : minimum size to classify a cluster; size must be greater than four; default is 6
+-outline : choices of 0-2:
+			0: only ellipses are shown
+			1: only convex hulls are shown
+			2: both ellipses and convex hulls are shown
 
 Example command:
 
