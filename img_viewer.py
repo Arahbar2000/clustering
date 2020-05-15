@@ -35,14 +35,19 @@ def parse_arguments():
     help_i = "Path to input image"
     help_o = "path to output csv file"
     required.add_argument("-i", "--input_path", help=help_i, type=str, required=True)
-    required.add_argument("-o", "--output_path", help=help_o, type=str, required=True)
+    required.add_argument("-o", "--output_dir", help=help_o, type=str, required=True)
     args = parser.parse_args()
 
     if not os.path.isfile(args.input_path):
         msg = "Unable to find file {}".format(args.input_path)
         exit_wiht_error(msg)
 
-    filename = args.output_path
+    if not os.path.isdir(args.output_dir):
+        os.makedirs(args.output_dir)
+
+    filename = args.input_path.split("/")[1]
+    filename = filename.split(".")[0] + '.csv'
+    filename = args.output_dir + '/' + filename
     return args.input_path
 
 
