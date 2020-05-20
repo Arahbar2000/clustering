@@ -23,6 +23,7 @@ import math
 from skimage.measure import EllipseModel
 from matplotlib.patches import Ellipse
 import sys
+from math import cos, sin
 
 
 def parse_arguments():
@@ -39,8 +40,14 @@ def parse_arguments():
     help_o = "Output directory that will show clusters for each image"
     required.add_argument("-clusteredImages", "--clustered_images_dir", help=help_o, type=str, required=True)
 
-    help_os = "statistics_dir"
-    required.add_argument("-stats", "--statistics_dir", help=help_os, type=str, required=True)
+    help_small = "path to statistics directory for small clusters"
+    required.add_argument("-stats_s", "--statistics_dir_s", help=help_small, type=str, required=True)
+
+    help_large = "path to statistics directory for larg clusters"
+    required.add_argument("-stats_l", "--statistics_dir_l", help=help_large, type=str, required=True)
+
+    help_split = "this value separates the cutt-off of large clusters and small clusters; default is 10"
+    required.add_argument("-split", "--split", help=help_split, type=int, required=False)
 
     help_im = "images_dir"
     required.add_argument("-images", "--images_dir", help=help_im, type=str, required=True)
@@ -78,9 +85,10 @@ def parse_arguments():
     if not os.path.isdir(args.clustered_images_dir):
         os.makedirs(args.clustered_images_dir)
 
-    if not os.path.isdir(args.statistics_dir):
-    	os.makedirs(args.statistics_dir)
-
+    if not os.path.isdir(args.statistics_dir_s):
+    	os.makedirs(args.statistics_dir_s)
+    if not os.path.isdir(args.statistics_dir_l):
+    	os.makedirs(args.statistics_dir_l)
     if not os.path.isdir(args.images_dir):
     	sys.exit("ERROR: images directory does not exist!")
 
@@ -89,10 +97,12 @@ def parse_arguments():
         "clustered_images": args.clustered_images_dir,
         "epsilon": args.epsilon,
         "method": args.method,
-        "statistics": args.statistics_dir,
+        "statistics_s": args.statistics_dir_s,
+        "statistics_l": args.statistics_dir_l,
         "images": args.images_dir,
         "min_size": args.min_size,
-        "outline": args.outline
+        "outline": args.outline,
+        "split": args.split
     }
 
 def read_csv(csv_path):
@@ -135,14 +145,20 @@ def get_clusters(data, e = None, min_size = None, clusterMethod='dbscan'):
 	plt.title('Estimated number of clusters: %d' % n_clusters)
 	return labels
 
-def clusterInfo(data, labels, out_path, h, w, axes, outline=None,):
+def clusterInfo(data, labels, stats_path_s, stats_path_l, h, w, axes, outline=None, split=None):
 	data = np.array(data, dtype='float64')
 	unique_labels = set(labels[labels != -1])
-	info = pd.DataFrame(columns = ['label', 'centroid', 'area','n_nuclei', 'nuclei_density', '    eccentricity'], dtype='int64', copy=True)
-	info.centroid.astype(str)
-	info.label.round(0)
+	info_s = pd.DataFrame(columns = ['label', 'centroid', 'area','n_nuclei', 'nuclei_density', '    eccentricity', 'ellipticity'], dtype='int64', copy=True)
+	info_l = pd.DataFrame(columns = ['label', 'centroid', 'area','n_nuclei', 'nuclei_density', '    eccentricity', 'ellipticity'], dtype='int64', copy=True)
+	info_s.centroid.astype(str)
+	info_l.centroid.astype(str)
+	info_s.label.round(0)
+	info_l.label.round(0)
 	n_clusters_ = len(unique_labels)
 	e = None
+	ellipticity = None
+	if split == None:
+		split = 10
 	total_area = h*w
 	for label in unique_labels: # for every cluster
 		indices =  np.where(labels == label)
@@ -178,6 +194,8 @@ def clusterInfo(data, labels, out_path, h, w, axes, outline=None,):
 			ellipse = None
 			if ell.estimate(hullPoints):
 				xc, yc, a, b, theta = ell.params
+				ellipticity = getEllipticity(hullPoints, xc, yc, a, b, theta)
+				# print(ellipticity)
 				degrees = math.degrees(theta)
 				if a > b:
 					e = math.sqrt(1 - (b/a)**2)
@@ -197,19 +215,25 @@ def clusterInfo(data, labels, out_path, h, w, axes, outline=None,):
 						axes.plot(clusterIndices[simplex, 0], clusterIndices[simplex, 1], 'k-')
 				elif outline == 0:
 					axes.add_patch(ellipse)
+				
 
 					
 
 		area = (hull.volume / total_area)*100 
 		density = area / total_area
-		info = info.append({'label': int(label), 'centroid': '({},{})'.format(format(x_average, '.2f'), format(y_average, '.2f')), 'area': format(area, '.4f'), 'n_nuclei': format(n_indices, '.6f'), 'nuclei_density': format(density, '.15f'), '    eccentricity': e}, ignore_index=True)
-	info.to_csv(out_path, index=None, sep='\t')
+		if(n_indices >= split):
+			info_l = info_l.append({'label': int(label), 'centroid': '({},{})'.format(format(x_average, '.2f'), format(y_average, '.2f')), 'area': format(area, '.4f'), 'n_nuclei': format(n_indices, '.6f'), 'nuclei_density': format(density, '.15f'), '    eccentricity': e, 'ellipticity': ellipticity}, ignore_index=True)
+		else:
+			info_s = info_s.append({'label': int(label), 'centroid': '({},{})'.format(format(x_average, '.2f'), format(y_average, '.2f')), 'area': format(area, '.4f'), 'n_nuclei': format(n_indices, '.6f'), 'nuclei_density': format(density, '.15f'), '    eccentricity': e, 'ellipticity': ellipticity}, ignore_index=True)
+	info_l.to_csv(stats_path_l, index=None, sep='\t')
+	info_s.to_csv(stats_path_s, index=None, sep='\t')
 
 def extract_clusters(user_options):
 	for csv_name in os.listdir(user_options["input_res"]):
 		if csv_name.split(".")[-1] in ["csv"]:
 			csv_path = os.path.join(user_options["input_res"], csv_name)
-			stats_path = user_options["statistics"] + '/' + csv_name
+			stats_path_s = user_options["statistics_s"] + '/' + csv_name
+			stats_path_l = user_options["statistics_l"] + '/' + csv_name
 			img_cluster_name = csv_name.split(".")[0] + '.png'
 			img_cluster_path = user_options["clustered_images"] + '/' + img_cluster_name
 			coordinates = read_csv(csv_path)
@@ -227,9 +251,67 @@ def extract_clusters(user_options):
 			plt.imshow(img)
 
 			labels = get_clusters(coordinates, user_options["epsilon"], clusterMethod=user_options["method"])
-			clusterInfo(coordinates, labels, stats_path, h ,w, axes, outline=user_options["outline"])
+			clusterInfo(coordinates, labels, stats_path_s, stats_path_l, h ,w, axes, outline=user_options["outline"], split=user_options["split"])
 			plt.savefig(img_cluster_path)
 			plt.clf()
+
+# computes the average distance ratio to ellipse and the center, which provides a measure of ellipticity
+# method obtained from milos stojmenovic in "Direct Eclipse Fitting and Measuring Based on Shape Boundaries"
+def getEllipticity(coords, xc, yc, a, b, theta):
+	sum = 0
+	for point in coords:
+		intersect = getIntersection(xc, yc, a, b, theta, point)
+		if intersect == None:
+			return None
+		distIntersect = dist([point[0], point[1]], [intersect[0], intersect[1]])
+		distCenter = dist([point[0], point[1]], [xc, yc])
+		sum += (distIntersect/distCenter)
+	return sum / len(coords)
+
+def getIntersection(xc, yc, a, b, theta, point):
+	m = (point[1] - yc) / (point[0] - xc) # slope
+	bi = point[1] - (m*point[0]) # y-intercept
+	if a < b:
+		t = b
+		b = a
+		a = t
+	# coefficients of quadratic equation
+	A = (((cos(theta)**2))+((2*m*cos(theta)*sin(theta))) + ((m**2)*sin(theta)))/(a**2) + (((sin(theta)**2))+((2*m*cos(theta)*sin(theta))) + ((m**2)*cos(theta)))/(b**2)
+	B = (((-2*xc*(cos(theta)**2))+(2*bi*cos(theta)*sin(theta))-(2*yc*cos(theta)*sin(theta))-(2*m*xc*cos(theta)*sin(theta))+(2*m*bi*(sin(theta**2)))-(2*m*yc*(sin(theta)**2)))/(a**2)) + (((-2*xc*(sin(theta)**2))+(2*bi*cos(theta)*sin(theta))-(2*yc*cos(theta)*sin(theta))-(2*m*xc*cos(theta)*sin(theta))+(2*m*bi*(cos(theta**2)))-(2*m*yc*(cos(theta)**2)))/(b**2))
+	C = ((((xc**2)*(cos(theta)**2))-(2*bi*xc*cos(theta)*sin(theta))+(2*xc*yc*cos(theta)*sin(theta))+(bi**2)*(sin(theta)**2)-(2*bi*yc*(sin(theta)**2))+((yc**2)*(sin(theta)**2)))/(a**2)) + ((((xc**2)*(sin(theta)**2))-(2*bi*xc*cos(theta)*sin(theta))+(2*xc*yc*cos(theta)*sin(theta))+(bi**2)*(cos(theta)**2)-(2*bi*yc*(cos(theta)**2))+((yc**2)*(cos(theta)**2)))/(b**2))
+
+	print("A: {}, B: {}, C: {}, m: {}, bi: {}".format(A, B, C, m, bi))
+
+
+	det = (B**2) - (4*A*C)
+	intersection = 0
+	if det >= 0:
+		# solving for x
+		xUpper = ((B*-1) + (det**(1/2))) / (2*A)
+		xLower = ((B*-1) - (det**(1/2))) / (2*A)
+
+		# using x coordinates to find y coordinates
+		yUpper = m*xUpper + bi
+		yLower = m*xLower + bi
+		distUpper = dist([point[0], point[1]], [xUpper, yUpper])
+		distLower = dist([point[0], point[1]], [xLower, yLower])
+
+		# returning the closest intersection
+		if distUpper <= distLower:
+			return (xUpper, yUpper)
+		else:
+			return (xLower, yLower)
+	else:
+		return None
+
+def dist(a, b):
+	x1 = a[0]
+	x2 = b[0]
+	y1 = a[1]
+	y2 = b[1]
+	return (((x2-x1)**2) + ((y2-y1)**2)) ** (1/2)
+
+
 
 if __name__ == "__main__":
     extract_clusters(parse_arguments())

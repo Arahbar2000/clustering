@@ -10,13 +10,15 @@ here is the list of required options:
 -csv : path to directory containing list of csv coordinate files
 -clusteredImages : path to directory to store generated images showing clusters
 -images : path to directory containing stored image files
--stats : path to directory to store generated csv files of stats for clusters in each image
+-stats_s : path to directory to store generated csv files of stats for small clusters in each image
+-stats_l : path to directory to store generated csv files of stats for large clusters in each image
 
 here is the list of optional options:
 
 -method : clustering method to be used; the methods are "dbscan", "optics", and "hdbscan"; 				default is 'dbscan'
 -epsilon : int value signifying the distance threshold for clusters; default is 35
 -min_size : minimum size to classify a cluster; size must be greater than four; default is 6
+-split : anything greater than or equal to designates a large cluster; the default is 10
 -outline : choices of 0-2:
 			0: only ellipses are shown
 			1: only convex hulls are shown
@@ -24,7 +26,7 @@ here is the list of optional options:
 
 Example command:
 
-python3 clusters.py -csv csvHighRes -clusteredImages clusteredImagesHighRes -images highResolutionImages -stats clusterStats -method dbscan -epsilon 35 -min_size 6 -outline 1
+python3 clusters.py -csv csvHighRes -clusteredImages clusteredImagesHighRes -images highResolutionImages -stats_s clusterStats_s -stats_l clusterStats_l -method dbscan -epsilon 35 -min_size 6 -outline 1 -split 15
 
 ***NOTE***: csv file names and image file names must match. The only difference is the type 			specifier ending ie. ".tiff"
 
