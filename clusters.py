@@ -172,18 +172,10 @@ def cluster_info(data, paths,
     for label in unique_labels:  # for every cluster
         indices = np.where(data["cluster_labels"] == label)
         cluster_coords = np.array(data["coordinates"][indices], dtype='float32')
+        stats["n_indices"] = len(cluster_coords)
         # centroid
-        stats["x_average"] = 0
-        stats["y_average"] = 0
-        stats["n_indices"] = 0
-
-        # computes centroid
-        for coord in cluster_coords:
-            stats["x_average"] += coord[0]
-            stats["y_average"] += coord[1]
-            stats["n_indices"] += 1
-        stats["x_average"] /= stats["n_indices"]
-        stats["y_average"] /= stats["n_indices"]
+        stats["x_average"] = sum(cluster_coords[:, 0]) / stats["n_indices"]
+        stats["y_average"] = sum(cluster_coords[:, 1]) / stats["n_indices"]
 
         # if the cluster has more than two nuclei, constructs a polygon
         if stats["n_indices"] > 3:
@@ -226,7 +218,8 @@ def compute_hull_and_outline(hull, cluster_coords, stats, optional_params, axes)
     ell = EllipseModel()
     if ell.estimate(hull_points):
         x_center, y_center, a_radius, b_radius, theta = ell.params
-        stats["ellipticity"] = 0
+        stats["ellipticity"] = compute_ellipticity_elliptic_variance(
+            cluster_coords, [stats["x_average"], stats["y_average"]])
         degrees = math.degrees(theta)
         if a_radius > b_radius:
             stats["eccentricity"] = math.sqrt(1 - (b_radius / a_radius) ** 2)
@@ -251,6 +244,80 @@ def compute_hull_and_outline(hull, cluster_coords, stats, optional_params, axes)
         stats["eccentricity"] = None
         stats["ellipticity"] = None
     return stats
+
+
+def compute_ellipticity_moment_based(cluster_coords, centroid):
+    """Returns an area based ellipticity measure using moments"""
+    result = 0
+    i = 0
+    while i <= 4:
+        j = 0
+        while i + j <= 4:
+            result += (central_moment_derivative(cluster_coords, centroid, i, j) -
+                       central_moment(cluster_coords, centroid, i, j)) ** 2
+            j += 1
+        i += 1
+    return result
+
+
+def compute_ellipticity_affine_transform(cluster_coords, centroid):
+    """Returns an ellipticity measure based on affine moment invariants"""
+    central_moment_20 = central_moment(cluster_coords, centroid, 2, 0)
+    central_moment_02 = central_moment(cluster_coords, centroid, 0, 2)
+    central_moment_11 = central_moment(cluster_coords, centroid, 1, 1)
+    central_moment_00 = central_moment(cluster_coords, centroid, 0, 0)
+    affine_moment_invariant = (central_moment_20 * central_moment_02 - (central_moment_11 ** 2)) / \
+                              (central_moment_00 ** 4)
+    print(affine_moment_invariant)
+    if affine_moment_invariant <= 1 / (16 * (math.pi ** 2)):
+        return 16 * (math.pi ** 2) * affine_moment_invariant
+    return 1 / (16 * (math.pi ** 2) * affine_moment_invariant)
+
+
+def central_moment(cluster_coords, centroid, i, j):
+    """Returns the central moment"""
+    result = 0
+    for coord in cluster_coords:
+        result += ((coord[0] - centroid[0]) ** i) * ((coord[1] - centroid[1]) ** j)
+    return result
+
+
+def central_moment_derivative(cluster_coords, centroid, i, j):
+    """Returns the derivative of the central moment"""
+    result = 0
+    for coord in cluster_coords:
+        result += (((coord[0] - centroid[0]) ** i) * j * ((coord[1] - centroid[1]) ** (j - 1))) + \
+                  (((coord[1] - centroid[1]) ** j) * i * ((coord[0] - centroid[0]) ** (i - 1)))
+    return result
+
+
+def compute_ellipticity_elliptic_variance(cluster_coords, centroid):
+    """returns ellipticity using the method of elliptiv variance"""
+    covariance = np.zeros((2, 2))
+    centroid = np.asarray(centroid)
+    for coord in cluster_coords:
+        temp = np.subtract(coord, centroid)
+        covariance = np.add(covariance, np.outer(temp, temp))
+    covariance = np.divide(covariance, len(cluster_coords))
+
+    mean_radius = 0
+    for coord in cluster_coords:
+        temp = np.subtract(coord, centroid)
+        temp = temp.T
+        mean_radius += (np.dot(np.dot(temp.T, np.linalg.inv(covariance)), temp)) ** (1/2)
+    mean_radius /= len(cluster_coords)
+
+    elliptic_variance = 0
+    for coord in cluster_coords:
+        temp = np.subtract(coord, centroid)
+        temp = temp.T
+        elliptic_variance += (((np.dot(np.dot(temp.T, np.linalg.inv(covariance)), temp))
+                               ** (1/2)) - mean_radius) ** 2
+        elliptic_variance /= len(cluster_coords) * (mean_radius ** 2)
+
+    ellipticity = 1 / (1 + elliptic_variance)
+    return ellipticity
+
 
 
 def extract_clusters(user_options):
