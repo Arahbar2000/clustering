@@ -190,8 +190,8 @@ def cluster_info(data, paths, axes, optional_params):
         regions_image, properties = generate_image_and_stats(data, cluster_coords,
                                                              regions_image, optional_params, axes)
         stats["n_indices"] = len(cluster_coords)
-        stats["x_average"] = properties[0].centroid[0]
-        stats["y_average"] = properties[0].centroid[1]
+        stats["x_average"] = properties[0].centroid[1]
+        stats["y_average"] = properties[0].centroid[0]
         stats["area"] = (properties[0].area / stats["total_area"]) * 100
         stats["eccentricity"] = properties[0].eccentricity
         stats["ellipticity"] = 0
