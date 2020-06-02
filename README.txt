@@ -1,6 +1,6 @@
 # clustering
 
-CLUSTERS.PY
+CLUSTERING IMAGES
 This program allows you to generate clusters for images and also lets you use a wide variety of parameters and options for generating clusters. To run this program type:
 
 python3 clusters.py <options>
@@ -12,6 +12,7 @@ here is the list of required options:
 -images : path to directory containing stored image files
 -stats_s : path to directory to store generated csv files of stats for small clusters in each image
 -stats_l : path to directory to store generated csv files of stats for large clusters in each image
+-shapes : path to shapes directory to store white masks of each cluster as well as the ellipses
 
 here is the list of optional options:
 
@@ -28,28 +29,12 @@ Example command:
 
 python3 clusters.py -csv csvHighRes -clusteredImages clusteredImagesHighRes
  -images highResolutionImages -stats_s clusterStats_s -stats_l clusterStats_l
-  -method dbscan -epsilon 35 -min_size 6 -outline 1 -split 15
+  -method dbscan -epsilon 35 -min_size 6 -outline 1 -split 15 -shapes s
 
 ***NOTE***: csv file names and image file names must match. The only difference is the type 			specifier ending ie. ".tiff"
 
-CLUSTERS_IMG.PY
 
-This program builds upon clusters.py by using skimage.measure.regionprops to find the properties of each cluster.
-Furthermore, the program now computes the concave hull of each cluster rather than the convex hull,
-which allows for more tightly fitted boundaries to each cluster. This program runs
-the exact same as clusters.py except you have a new required shapes option where
-you have to input a shapes directory. This directory shows each cluster through white regions of the same pixel value.
-This program does not yet have working code for finding ellipticity, nor does clusters.py
-
--shapes <path to shapes directory>
-
-Example run for this program:
-
-python3 clusters_img.py -csv csvHighRes -clusteredImages clusteredImagesHighRes
- -images highResolutionImages -stats_s clusterStats_s -stats_l clusterStats_l
-  -method dbscan -epsilon 35 -min_size 6 -split 15 -outline 1 -shapes shapes
-
-IMG_VIEWER.PY
+ANNOTATING IMAGES
 
 To convert an image of nuclei to a CSV file, cd into this directory and input this command:
 
