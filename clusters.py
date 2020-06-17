@@ -14,6 +14,7 @@ from skimage.measure import label, regionprops
 from sklearn.cluster import DBSCAN, OPTICS
 import alphashape
 from matplotlib.patches import Ellipse
+from scipy import spatial
 import cv2
 
 
@@ -113,6 +114,38 @@ def parse_arguments():
     }
 
 
+def get_arguments():
+    """Uses already set arguments so the user doesn't have to specify the arguments each time
+    the program runs. Allows for easier testing"""
+    args = {}
+    args["input_res"] = "csvHighRes"
+    args["clustered_images"] = "clusteredImagesHighRes"
+    args["statistics_s"] = "clusterStats_s"
+    args["statistics_l"] = "clusterStats_l"
+    args["shapes_dir"] = "shapes"
+    args["images"] = "highResolutionImages"
+    args["epsilon"] = 35
+    args["method"] = None
+    args["min_size"] = None
+    args["outline"] = 0
+    args["split"] = None
+
+    if not os.path.isdir(args["clustered_images"]):
+        os.makedirs(args["clustered_images"])
+
+    if not os.path.isdir(args["shapes_dir"]):
+        os.makedirs(args["shapes_dir"])
+
+    if not os.path.isdir(args["statistics_s"]):
+        os.makedirs(args["statistics_s"])
+    if not os.path.isdir(args["statistics_l"]):
+        os.makedirs(args["statistics_l"])
+    if not os.path.isdir(args["images"]):
+        sys.exit("ERROR: images directory does not exist!")
+
+    return args
+
+
 def read_csv(csv_path):
     """Reads a list of coordinates from csv file and returns coordinates"""
     coordinates = np.genfromtxt(csv_path, delimiter=',', skip_header=1, usecols=(1, 2))
@@ -170,11 +203,13 @@ def cluster_info(data, paths, axes, optional_params):
      and returns a shapes image showing the concave shape of each image"""
     info_s = pd.DataFrame(
         columns=['centroid', 'area', 'n_nuclei', 'nuclei_density',
-                 '    eccentricity', 'ellipticity'],
+                 'eccentricity', 'ellipticity', 'rectangularity', 'compactness',
+                 'elongation', 'roundness', 'convexity', 'solidity'],
         dtype='int64', copy=True)
     info_l = pd.DataFrame(
         columns=['centroid', 'area', 'n_nuclei', 'nuclei_density',
-                 '    eccentricity', 'ellipticity'],
+                 'eccentricity', 'ellipticity', 'rectangularity', 'compactness',
+                 'elongation', 'roundness', 'convexity', 'solidity'],
         dtype='int64', copy=True)
     info_s.centroid.astype(str)
     info_l.centroid.astype(str)
@@ -187,9 +222,8 @@ def cluster_info(data, paths, axes, optional_params):
     for cluster_label in unique_labels:
         indices = np.where(data["cluster_labels"] == cluster_label)
         cluster_coords = np.array(data["coordinates"][indices], dtype='int32')
-        regions_image, properties, ellipticity = generate_image_and_stats(data, cluster_coords,
-                                                                          regions_image,
-                                                                          optional_params, axes)
+        regions_image, properties, ellipticity, convex_perimeter, convex_area = \
+            generate_image_and_stats(data, cluster_coords, regions_image, optional_params, axes)
         stats["n_indices"] = len(cluster_coords)
         stats["x_average"] = properties[0].centroid[1]
         stats["y_average"] = properties[0].centroid[0]
@@ -197,28 +231,53 @@ def cluster_info(data, paths, axes, optional_params):
         stats["eccentricity"] = properties[0].eccentricity
         stats["ellipticity"] = ellipticity
         stats["density"] = stats["n_indices"] / properties[0].area
+        stats["rectangularity"] = properties[0].area / properties[0].bbox_area
+        stats["compactness"] = (4 * math.pi * properties[0].area) / (properties[0].perimeter ** 2)
+        stats["elongation"] = properties[0].minor_axis_length / properties[0].major_axis_length
+        stats["roundness"] = (4 * math.pi * properties[0].area) / (convex_perimeter ** 2)
+        stats["convexity"] = convex_perimeter / properties[0].perimeter
+        stats["solidity"] = properties[0].area / convex_area
+
+
         if stats["n_indices"] >= optional_params["split"]:
             info_l = info_l.append(
-                {'centroid': f'({format(stats["x_average"], ".2f")},'
-                             f'{format(stats["y_average"], ".2f")})',
-                 'area': format(stats["area"], '.4f'),
-                 'n_nuclei': format(stats["n_indices"], '.6f'),
-                 'nuclei_density': format(stats["density"], '.15f'),
-                 '    eccentricity': stats["eccentricity"],
-                 'ellipticity': stats["ellipticity"]},
+                {'centroid': '({:.2f}, {:.2f})'.format(stats["x_average"], stats["y_average"]),
+                 'area': "{:.4f}%".format(stats["area"]),
+                 'n_nuclei': stats["n_indices"],
+                 'nuclei_density': "{:.6f}".format(stats["density"]),
+                 'eccentricity': "{:.6f}".format(stats["eccentricity"]),
+                 'ellipticity': "{:.6f}".format(stats["ellipticity"]),
+                 'rectangularity': "{:.6f}".format(stats["rectangularity"]),
+                 'compactness': "{:.6f}".format(stats["compactness"]),
+                 'elongation': "{:.6f}".format(stats["elongation"]),
+                 'roundness': "{:.6f}".format(stats["roundness"]),
+                 'convexity': "{:.6f}".format(stats["convexity"]),
+                 'solidity': "{:.6f}".format(stats["solidity"])},
                 ignore_index=True)
         else:
             info_s = info_s.append(
-                {'centroid': f'({format(stats["x_average"], ".2f")},'
-                             f'{format(stats["y_average"], ".2f")})',
-                 'area': format(stats["area"], '.4f'),
-                 'n_nuclei': format(stats["n_indices"], '.6f'),
-                 'nuclei_density': format(stats["density"], '.15f'),
-                 '    eccentricity': stats["eccentricity"],
-                 'ellipticity': stats["ellipticity"]},
+                {'centroid': '({:.2f}, {:.2f})'.format(stats["x_average"], stats["y_average"]),
+                 'area': "{:.4f}%".format(stats["area"]),
+                 'n_nuclei': stats["n_indices"],
+                 'nuclei_density': "{:.6f}".format(stats["density"]),
+                 'eccentricity': "{:.6f}".format(stats["eccentricity"]),
+                 'ellipticity': "{:.6f}".format(stats["ellipticity"]),
+                 'rectangularity': "{:.6f}".format(stats["rectangularity"]),
+                 'compactness': "{:.6f}".format(stats["compactness"]),
+                 'elongation': "{:.6f}".format(stats["elongation"]),
+                 'roundness': "{:.6f}".format(stats["roundness"]),
+                 'convexity': "{:.6f}".format(stats["convexity"]),
+                 'solidity': "{:.6f}".format(stats["solidity"])},
                 ignore_index=True)
-    info_l.to_csv(paths["large_cluster_stats"], index=False, sep='\t')
-    info_s.to_csv(paths["small_cluster_stats"], index=False, sep='\t')
+    if not info_l.empty:
+        large_cluster_writer = open(paths["large_cluster_stats"], 'w')
+        large_cluster_writer.write(info_l.to_string())
+        large_cluster_writer.close()
+    if not info_s.empty:
+        small_cluster_writer = open(paths["small_cluster_stats"], 'w')
+        small_cluster_writer.write(info_s.to_string())
+        small_cluster_writer.close()
+
     return regions_image
 
 
@@ -231,6 +290,7 @@ def generate_image_and_stats(data, cluster_coords, regions_image, optional_param
     for coord in border_points:
         list_array.append(coord)
     # border_points = cluster_coords[spatial.ConvexHull(cluster_coords).vertices]
+    hull = spatial.ConvexHull(cluster_coords)
     border_points = np.array(list_array, dtype='int32')
 
     regions_image = cv2.fillPoly(regions_image, np.int32([border_points]), (255, 255, 255))
@@ -245,7 +305,7 @@ def generate_image_and_stats(data, cluster_coords, regions_image, optional_param
     regions_image = cv2.ellipse(regions_image, parameters, (0, 0, 255))
     add_outline(border_points, axes, optional_params, properties)
     ellipticity = compute_ellipticity_area_based(data, border_points)
-    return regions_image, properties, ellipticity
+    return regions_image, properties, ellipticity, hull.area, hull.volume
 
 
 def compute_ellipticity_area_based(data, border_points):
@@ -324,4 +384,4 @@ def extract_clusters(user_options):
 
 
 if __name__ == "__main__":
-    extract_clusters(parse_arguments())
+    extract_clusters(get_arguments())
