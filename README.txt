@@ -27,9 +27,7 @@ here is the list of optional options:
 
 Example command:
 
-python3 clusters.py -csv csvHighRes -clusteredImages clusteredImagesHighRes
- -images highResolutionImages -stats_s clusterStats_s -stats_l clusterStats_l
-  -method dbscan -epsilon 35 -min_size 6 -outline 1 -split 15 -shapes s
+python3 clusters.py -csv csvHighRes -clusteredImages clusteredImagesHighRes -images highResolutionImages -stats_s clusterStats_s -stats_l clusterStats_l -method dbscan -epsilon 35 -min_size 6 -outline 1 -split 15 -shapes shapes
 
 ***NOTE***: csv file names and image file names must match. The only difference is the type 			specifier ending ie. ".tiff"
 
