@@ -20,9 +20,7 @@ import cv2
 
 def parse_arguments():
     """ Parses command line to obtain the root directory.
-    Returns a dictionary with the 'input_res' and
-    'output_res' keys. These keys define the input and
-    output directories selected by the user.
+    Returns a dictionary with specified directories and parameters.
     """
     describe = "Show clusters for each image"
     parser = argparse.ArgumentParser(description=describe)
